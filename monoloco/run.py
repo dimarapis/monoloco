@@ -64,16 +64,18 @@ def cli():
     predict_parser.add_argument('--dropout', type=float, help='dropout parameter', default=0.2)
     predict_parser.add_argument('--show_all', help='only predict ground-truth matches or all', action='store_true')
     predict_parser.add_argument('--webcam', help='monstereo streaming', action='store_true')
+    predict_parser.add_argument('--infer_video', help='load and predict on video', action='store_true')
+    predict_parser.add_argument('--video_path', type=str, default='24a_human_close.mp4', help='video location')
     predict_parser.add_argument('--camera', help='device to use for webcam streaming', type=int, default=0)
     predict_parser.add_argument('--calibration', help='type of calibration camera, either custom, nuscenes, or kitti',
-                                type=str, default='custom')
+                                type=str, default='24a')
     predict_parser.add_argument('--focal_length',
                                 help='foe a custom camera: focal length in mm for a sensor of 7.2x5.4 mm. (nuScenes)',
-                                type=float, default=5.7)
+                                type=float, default=1.88)
 
     # Social distancing and social interactions
-    predict_parser.add_argument('--threshold_prob', type=float, help='concordance for samples', default=0.25)
-    predict_parser.add_argument('--threshold_dist', type=float, help='min distance of people', default=2.5)
+    predict_parser.add_argument('--threshold_prob', type=float, help='concordance for samples', default=0.35)
+    predict_parser.add_argument('--threshold_dist', type=float, help='min distance of people', default=0.5)
     predict_parser.add_argument('--radii', type=tuple, help='o-space radii', default=(0.3, 0.5, 1))
 
     # Preprocess input data
@@ -142,7 +144,10 @@ def main():
         if args.webcam:
             from .visuals.webcam import webcam
             webcam(args)
-        else:
+        elif args.infer_video:
+            from .visuals.webcam import video
+            video(args)
+        else:    
             from .predict import predict
             predict(args)
 

@@ -34,9 +34,10 @@ def factory_from_args(args):
     args.checkpoint = dic_models['keypoints']
 
     logger.configure(args, LOG)  # logger first
+    print(args.output_types)
+    print(len(args.output_types))
 
-    assert len(args.output_types) == 1 and 'json' not in args.output_types
-
+    #assert len(args.output_types) == 1 and 'json' not in args.output_types
     # Devices
     args.device = torch.device('cpu')
     args.pin_memory = False
@@ -99,7 +100,7 @@ def webcam(args):
         LOG.debug('resized image size: {}'.format(image.shape))
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         pil_image = Image.fromarray(image)
-
+        #pil_image.show()
         data = datasets.PilImageList(
             [pil_image], preprocess=predictor.preprocess)
 
@@ -142,10 +143,98 @@ def webcam(args):
 
         LOG.debug(dic_out)
         visualizer_mono.send((pil_image, dic_out, pifpaf_outs))
+        LOG.info(f'\n\n{pil_image.size}, {dic_out}, {len(pifpaf_outs)}\n\n')
 
         end = time.time()
         LOG.info("run-time: {:.2f} ms".format((end-start)*1000))
 
+    cam.release()
+
+    cv2.destroyAllWindows()
+
+
+def video(args):
+
+    assert args.mode in 'mono'
+    assert cv2
+
+    args, dic_models = factory_from_args(args)
+
+    # Load Models
+    net = Loco(model=dic_models[args.mode], mode=args.mode, device=args.device,
+               n_dropout=args.n_dropout, p_dropout=args.dropout)
+
+    # for openpifpaf predicitons
+    predictor = openpifpaf.Predictor(checkpoint=args.checkpoint)
+
+    # Start recording
+    #cam = cv2.VideoCapture(args.camera)
+    #visualizer_mono = None
+    cam = cv2.VideoCapture(args.video_path)
+    visualizer_mono = None
+
+    while True:
+        start = time.time()
+        ret, frame = cam.read()
+        scale = (args.long_edge)/frame.shape[0]
+        image = cv2.resize(frame, None, fx=scale, fy=scale)
+        height, width, _ = image.shape
+        LOG.debug('resized image size: {}'.format(image.shape))
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        pil_image = Image.fromarray(image)
+        #pil_image.show()
+        data = datasets.PilImageList(
+            [pil_image], preprocess=predictor.preprocess)
+
+        data_loader = torch.utils.data.DataLoader(
+            data, batch_size=1, shuffle=False,
+            pin_memory=False, collate_fn=datasets.collate_images_anns_meta)
+
+        for (_, _, _) in data_loader:
+
+            for idx, (preds, _, _) in enumerate(predictor.dataset(data)):
+
+                if idx == 0:
+                    pifpaf_outs = {
+                        'pred': preds,
+                        'left': [ann.json_data() for ann in preds],
+                        'image': image}
+
+        if not ret:
+            break
+        key = cv2.waitKey(1)
+        if key % 256 == 27:
+            # ESC pressed
+            LOG.info("Escape hit, closing...")
+            break
+        
+        #im_size = (float(pifpaf_outs['width_height'][0]), float(pifpaf_outs['width_height'][1]))
+
+        kk = load_calibration(args.calibration, (height, width), args.focal_length)
+
+        #kk = load_calibration(args.calibration, pil_image.size, focal_length=args.focal_length)
+        boxes, keypoints = preprocess_pifpaf(
+            pifpaf_outs['left'], (width, height))
+
+        dic_out = net.forward(keypoints, kk)
+        dic_out = net.post_process(dic_out, boxes, keypoints, kk)
+
+        if 'social_distance' in args.activities:
+            dic_out = net.social_distance(dic_out, args)
+        if 'raise_hand' in args.activities:
+            dic_out = net.raising_hand(dic_out, keypoints)
+        if visualizer_mono is None:  # it is, at the beginning
+            visualizer_mono = Visualizer(kk, args)(pil_image)  # create it with the first image
+            visualizer_mono.send(None)
+            print("visualizer_mono")
+
+        LOG.debug(dic_out)
+        LOG.info(f'\n\n{pil_image.size}, {dic_out}, {len(pifpaf_outs)}\n\n')
+        visualizer_mono.send((pil_image, dic_out, pifpaf_outs))
+
+        end = time.time()
+        LOG.info("run-time: {:.2f} ms".format((end-start)*1000))
+        
     cam.release()
 
     cv2.destroyAllWindows()
@@ -165,14 +254,15 @@ class Visualizer:
                           kk=self.kk, args=self.args)
 
         figures, axes = printer.factory_axes(None)
+        print(axes[0])
 
         for fig in figures:
             fig.show()
 
         while True:
             image, dic_out, pifpaf_outs = yield
-
-            # Clears previous annotations between frames
+            #print(len(axes[0]))
+            #Clears previous annotations between frames
             axes[0].patches = []
             axes[0].lines = []
             axes[0].texts = []
@@ -184,7 +274,7 @@ class Visualizer:
             if dic_out and dic_out['dds_pred']:
                 printer._process_results(dic_out)
                 printer.draw(figures, axes, image, dic_out, pifpaf_outs['left'])
-                mypause(0.01)
+                mypause(0.1)
 
 
 def mypause(interval):

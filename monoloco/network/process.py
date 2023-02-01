@@ -74,6 +74,14 @@ def load_calibration(calibration, im_size, focal_length=5.7):
             [0., im_size[1]*focal_length/Sy, im_size[1]/2],
             [0., 0., 1.]
         ]
+    elif calibration == '24a':
+        with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'intrinsics.yaml')) as a:
+            configs = yaml.safe_load(a)
+        kk = configs[calibration]['intrinsics']
+        orig_size = configs[calibration]['im_size']
+        scale = [size / orig for size, orig in zip(im_size, orig_size)]
+        kk[0] = [el * scale[0] for el in kk[0]]
+        kk[1] = [el * scale[1] for el in kk[1]]
     else:
         with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'intrinsics.yaml')) as a:
             configs = yaml.safe_load(a)

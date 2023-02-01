@@ -59,7 +59,7 @@ class Printer:
         self.kk = kk
         self.output_types = args.output_types
         self.z_max = args.z_max  # set max distance to show instances
-        self.webcam = args.webcam
+        self.webcam = True
         self.show_all = args.show_all or self.webcam
         self.show = args.show_all or self.webcam
         self.save = not args.no_save and not self.webcam
@@ -183,6 +183,7 @@ class Printer:
         if any(xx in self.output_types for xx in ['bird', 'multi']):
             ax1 = self._set_axes(ax1, axis=1)  # Adding field of view
             axes.append(ax1)
+            print(axes)
         return figures, axes
 
     def _webcam_front(self, axis, colors, activities, annotations, dic_out):
